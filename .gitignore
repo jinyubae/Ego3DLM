@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.vscode/
+
+# data / dependency / checkpoint roots (symlinks)
+checkpoints
+datasets
+deps
+obstacle_labels
+
+# outputs
+experiments/
+results/
+wandb/
+
+# large artifacts
+*.ckpt
+*.tar
+*.tar.gz
+.DS_Store

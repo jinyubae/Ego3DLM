@@ -1,0 +1,40 @@
+diff --git a/three_steps_3d_feature/second_step/lavis/models/eva_vit.py b/three_steps_3d_feature/second_step/lavis/models/eva_vit.py
+index 9370c94..38053ac 100644
+--- a/three_steps_3d_feature/second_step/lavis/models/eva_vit.py
++++ b/three_steps_3d_feature/second_step/lavis/models/eva_vit.py
+@@ -57,7 +57,10 @@ class Mlp(nn.Module):
+         self.drop = nn.Dropout(drop)
+ 
+     def forward(self, x):
+-        x = self.fc1(x.half())
++        target_dtype = self.fc1.weight.dtype
++        if x.dtype != target_dtype:
++            x = x.to(target_dtype)
++        x = self.fc1(x)
+         x = self.act(x)
+         # x = self.drop(x)
+         # commit this for the orignal BERT implement
+@@ -136,7 +139,10 @@ class Attention(nn.Module):
+         if self.q_bias is not None:
+             qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
+         # qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+-        qkv = F.linear(input=x.half(), weight=self.qkv.weight, bias=qkv_bias)
++        weight_dtype = self.qkv.weight.dtype
++        if x.dtype != weight_dtype:
++            x = x.to(weight_dtype)
++        qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
+         qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
+         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+ 
+@@ -234,7 +240,10 @@ class PatchEmbed(nn.Module):
+         assert (
+             H == self.img_size[0] and W == self.img_size[1]
+         ), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+-        x = self.proj(x.half()).flatten(2).transpose(1, 2)
++        proj_dtype = self.proj.weight.dtype
++        if x.dtype != proj_dtype:
++            x = x.to(proj_dtype)
++        x = self.proj(x).flatten(2).transpose(1, 2)
+         return x
+ 
+ 

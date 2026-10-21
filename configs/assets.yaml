@@ -1,0 +1,8 @@
+CONFIG_FOLDER: configs # Config files path
+FOLDER: experiments # Experiment files saving path
+
+DATASET:
+  WORD_VECTORIZER_PATH: deps/glove/
+  NYMERIA:
+    ROOT: datasets/ego3dlm
+    MEAN_STD_PATH: datasets/ego3dlm

@@ -1,0 +1,71 @@
+NAME: Ego3DLM_stage2_instruct # Experiment names
+ACCELERATOR: 'gpu' # Devices optioncal: “cpu”, “gpu”, “tpu”, “ipu”, “hpu”, “mps, “auto”
+NUM_NODES: 1 # Number of GPU nodes for distributed training
+DEVICE: [0] # Index of gpus eg. [0] or [0,1,2,3]
+
+TRAIN:
+  STAGE: lm_instruct # Stage II: scene reasoning -> current & future motion -> current & future narration
+  NUM_WORKERS: 16 # Number of workers
+  BATCH_SIZE: 8 # Size of batches
+  GRADIENT_ACCUMULATION_STEP: 1
+  END_EPOCH: 999999 # End epoch
+  RESUME: '' # Resume training from this path
+  PRETRAINED: 'checkpoints/ego3dlm/stage1_scene_pretrain.ckpt' # Stage I checkpoint
+  PRETRAINED_VAE: checkpoints/ego3dlm/stage0_pqvae.ckpt # Stage 0 PQ-VAE checkpoint
+
+  # the Stage I checkpoint has no Stage II special tokens yet: they are added after loading
+  INIT_SPECIAL_TOKENS: False
+  # load the Stage I checkpoint without the three-point encoder (disable when resuming)
+  LOAD_CKPT_WO_TP_ENC: True
+
+  OPTIM:
+    target: AdamW
+    params:
+      lr: 1e-4
+      betas: [0.9, 0.99]
+      weight_decay: 0.0
+
+# Evaluating Configuration
+EVAL:
+  BATCH_SIZE: 4 # Evaluating Batch size
+  SPLIT: test
+
+DATASET:
+  target: ego3dlm.data.lm_datamodule.LMDataModule
+  CODE_PATH: TOKENS
+  MIN_MOTION_LEN: 45
+  NUM_3D_POINTS: 10000
+  NYMERIA:
+    OBSTACLE_LABELS_PATH: obstacle_labels
+
+METRIC:
+  TYPE: ['PredMetrics', 'M2TMetrics', 'MotionTextMetrics']
+  FEATURE_EXTRACTOR: checkpoints/evaluator/text_mot_match_trainset_only_len20/finest.tar
+
+LOSS:
+  LAMBDA_CLS: 1.0
+
+model:
+  target: ego3dlm.models.ego3dlm.Ego3DLM
+  params:
+    num_query_token: 32
+    task: 'motion_narration'
+    lm: ${lm.gpt2_medium}
+    motion_vae: ${vq.pqvae}
+    max_token_length: 480
+    # three-point input: absolute + frame-to-frame relative poses, normalized with tp_cat_stats.pt
+    rel_tp: True
+    norm_tp: True
+    # special tokens: three-point, narration (current / future narration generated with the motion)
+    # and spatial scene reasoning (CoT) delimiters
+    tp_special_token: True
+    text_special_token: True
+    cot_special_token: True
+
+LOGGER:
+  TYPE: ['tensorboard', 'wandb']
+  VAL_EVERY_STEPS: 1
+  SAVE_TOP_K: 10
+  WANDB:
+    params:
+      project: ego3dlm

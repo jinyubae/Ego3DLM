@@ -1,0 +1,86 @@
+NAME: Ego3DLM_stage3_grpo # Experiment names
+ACCELERATOR: 'gpu' # Devices optioncal: “cpu”, “gpu”, “tpu”, “ipu”, “hpu”, “mps, “auto”
+NUM_NODES: 1 # Number of GPU nodes for distributed training
+DEVICE: [0,1] # Index of gpus eg. [0] or [0,1,2,3]
+
+TRAIN:
+  STAGE: lm_grpo # Stage III: GRPO
+  NUM_WORKERS: 16 # Number of workers
+  BATCH_SIZE: 1 # Size of batches
+  GRADIENT_ACCUMULATION_STEP: 1
+  END_EPOCH: 999999 # End epoch
+  RESUME: '' # Resume training from this path
+  PRETRAINED: 'checkpoints/ego3dlm/stage2_instruct.ckpt' # Stage II checkpoint
+  PRETRAINED_VAE: checkpoints/ego3dlm/stage0_pqvae.ckpt # Stage 0 PQ-VAE checkpoint
+
+  # the Stage II checkpoint already has the special tokens: they are added before loading
+  INIT_SPECIAL_TOKENS: True
+
+  # GRPO: G samples per prompt; reward = w_m * max(0, 1 - head ADE) + w_t * (BLEU-4 current + future)
+  #       + w_d * (-matching distances, current + future) - format penalty
+  GRPO:
+    REF_MODEL_PATH: 'checkpoints/ego3dlm/stage2_instruct.ckpt' # reference policy = Stage II checkpoint
+    REF_DEVICE: 'cuda:0'
+    NUM_SAMPLES: 6 # G
+    MAX_NEW_TOKENS: 256
+    TEMPERATURE: 1.0
+    TOP_P: 0.9
+    TOP_K: 50
+    MOTION_WEIGHT: 1.0 # w_m (head ADE over the current and future motion)
+    TEXT_WEIGHT: 0.8 # w_t
+    MATCHING_DIST_WEIGHT: 0.02 # w_d
+    MISSING_MOTION_PENALTY: 1.0
+    BETA: 0.001 # KL weight
+
+  OPTIM:
+    target: AdamW
+    params:
+      lr: 1e-6
+      betas: [0.9, 0.99]
+      weight_decay: 0.0
+
+# Evaluating Configuration
+EVAL:
+  BATCH_SIZE: 2 # Evaluating Batch size
+  SPLIT: test
+
+DATASET:
+  target: ego3dlm.data.lm_datamodule.LMDataModule
+  CODE_PATH: TOKENS
+  MIN_MOTION_LEN: 45
+  NUM_3D_POINTS: 10000
+  NYMERIA:
+    OBSTACLE_LABELS_PATH: obstacle_labels
+
+METRIC:
+  TYPE: ['PredMetrics', 'M2TMetrics', 'MotionTextMetrics']
+  FEATURE_EXTRACTOR: checkpoints/evaluator/text_mot_match_trainset_only_len20/finest.tar
+
+LOSS:
+  LAMBDA_CLS: 1.0
+
+model:
+  target: ego3dlm.models.ego3dlm.Ego3DLM
+  params:
+    num_query_token: 32
+    task: 'motion_narration'
+    lm: ${lm.gpt2_medium}
+    motion_vae: ${vq.pqvae}
+    max_token_length: 480
+    # three-point input: absolute + frame-to-frame relative poses, normalized with tp_cat_stats.pt
+    rel_tp: True
+    norm_tp: True
+    # special tokens: three-point, narration (current / future narration generated with the motion)
+    # and spatial scene reasoning (CoT) delimiters
+    tp_special_token: True
+    text_special_token: True
+    cot_special_token: True
+
+LOGGER:
+  TYPE: ['tensorboard', 'wandb']
+  VAL_EVERY_STEPS: 1
+  VAL_INTERVAL: 0.1 # validate every 10% of an epoch
+  SAVE_TOP_K: 0
+  WANDB:
+    params:
+      project: ego3dlm

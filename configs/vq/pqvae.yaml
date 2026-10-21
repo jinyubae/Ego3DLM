@@ -1,0 +1,11 @@
+target: ego3dlm.archs.pqvae.PQVAE
+params:
+  code_num: 4096          # 2 codebooks x 2048 codes
+  code_dim: 64            # 2 x 32-D
+  output_emb_width: 64
+  down_t: 2               # temporal downsampling 2^2 = 4
+  stride_t: 2
+  width: 512
+  depth: 3
+  dilation_growth_rate: 3
+  nfeats: ${DATASET.NFEATS}

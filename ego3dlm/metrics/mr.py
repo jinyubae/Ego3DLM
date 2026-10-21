@@ -1,0 +1,71 @@
+from typing import List
+
+import torch
+from torch import Tensor
+from torchmetrics import Metric
+
+from .utils import calc_accel, calc_mpjpe, calc_pampjpe
+
+
+# motion reconstruction metric
+class MRMetrics(Metric):
+
+    def __init__(self,
+                 njoints,
+                 force_in_meter: bool = True,
+                 dist_sync_on_step=True,
+                 **kwargs):
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+
+        self.force_in_meter = force_in_meter
+
+        self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("count_seq",
+                       default=torch.tensor(0),
+                       dist_reduce_fx="sum")
+
+        self.add_state("MPJPE",
+                       default=torch.tensor([0.0]),
+                       dist_reduce_fx="sum")
+        self.add_state("PAMPJPE",
+                       default=torch.tensor([0.0]),
+                       dist_reduce_fx="sum")
+        self.add_state("ACCEL",
+                       default=torch.tensor([0.0]),
+                       dist_reduce_fx="sum")
+
+    def compute(self, sanity_flag):
+        factor = 1000.0 if self.force_in_meter else 1.0
+
+        count = self.count
+        count_seq = self.count_seq
+        mr_metrics = {}
+        mr_metrics["MPJPE"] = self.MPJPE / count * factor
+        mr_metrics["PAMPJPE"] = self.PAMPJPE / count * factor
+        # accel error: joints_gt[:-2] - 2 * joints_gt[1:-1] + joints_gt[2:]
+        # n-2 for each sequences
+        mr_metrics["ACCEL"] = self.ACCEL / (count - 2 * count_seq) * factor
+        
+        # Reset
+        self.reset()
+        
+        return mr_metrics
+
+    def update(self, joints_rst: Tensor, joints_ref: Tensor,
+               lengths: List[int]):
+        assert joints_rst.shape == joints_ref.shape
+        assert joints_rst.dim() == 4
+        # (bs, seq, njoint=22, 3)
+
+        self.count += sum(lengths)
+        self.count_seq += len(lengths)
+
+        # avoid cuda error of DDP in pampjpe
+        rst = joints_rst.detach().cpu()
+        ref = joints_ref.detach().cpu()
+
+        for i in range(len(lengths)):
+            self.MPJPE += torch.sum(
+                calc_mpjpe(rst[i], ref[i], align_inds=None))
+            self.PAMPJPE += torch.sum(calc_pampjpe(rst[i], ref[i]))
+            self.ACCEL += torch.sum(calc_accel(rst[i], ref[i]))

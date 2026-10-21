@@ -1,0 +1,6 @@
+target: ego3dlm.archs.language_model.MotionLanguageModel
+params:
+  model_type: gpt2_custom_motion_3d_feature
+  model_path: openai-community/gpt2-medium
+  motion_codebook_size: ${model.params.codebook_size}
+  predict_ratio: 1.0

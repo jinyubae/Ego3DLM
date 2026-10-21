@@ -1,0 +1,44 @@
+NAME: Ego3DLM_tokenize # Experiment names
+ACCELERATOR: 'gpu' # Devices optioncal: “cpu”, “gpu”, “tpu”, “ipu”, “hpu”, “mps, “auto”
+NUM_NODES: 1 # Number of GPU nodes for distributed training
+DEVICE: [0] # Index of gpus eg. [0] or [0,1,2,3]
+
+TRAIN:
+  STAGE: vae # set to "token" by scripts/tokenize_motion.py
+  NUM_WORKERS: 16 # Number of workers
+  BATCH_SIZE: 256 # Size of batches
+  END_EPOCH: 999999 # End epoch
+  RESUME: '' # Resume training from this path
+  PRETRAINED: '' # Preatrained model path
+  PRETRAINED_VAE: checkpoints/ego3dlm/stage0_pqvae.ckpt # Stage 0 PQ-VAE checkpoint
+
+# Evaluating Configuration
+EVAL:
+  BATCH_SIZE: 32 # Evaluating Batch size
+  SPLIT: test
+
+DATASET:
+  target: ego3dlm.data.motion_datamodule.MotionDataModule
+  CODE_PATH: TOKENS # output folder of the motion tokens
+  MIN_MOTION_LEN: 5
+
+METRIC:
+  TYPE: ['MRMetrics']
+
+LOSS:
+  LAMBDA_FEATURE: 1.0
+  LAMBDA_VELOCITY: 0.5
+  LAMBDA_COMMIT: 0.02
+
+model:
+  target: ego3dlm.models.motion_tokenizer.MotionTokenizer
+  params:
+    motion_vae: ${vq.pqvae}
+
+LOGGER:
+  TYPE: ['tensorboard', 'wandb']
+  VAL_EVERY_STEPS: 10
+  SAVE_TOP_K: 0
+  WANDB:
+    params:
+      project: ego3dlm

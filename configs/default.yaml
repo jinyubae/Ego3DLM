@@ -1,0 +1,73 @@
+SEED_VALUE: 1234 # Seed value
+DEBUG: True # Debug mode (100-sample subsets); run with --nodebug for the full data
+FULL_CONFIG: false
+
+TRAIN:
+  SPLIT: 'train' # Training split name
+  NUM_WORKERS: 8 # Number of workers
+  BATCH_SIZE: 4 # Size of batches
+  END_EPOCH: 2000 # End epoch
+
+  RESUME: '' # Experiment path to be resumed training
+  PRETRAINED_VAE: '' # Stage 0 PQ-VAE checkpoint
+  PRETRAINED: '' # Pretrained model path
+
+  OPTIM:
+    target: AdamW
+    params:
+      lr: 2e-4
+      betas: [0.9, 0.99]
+      weight_decay: 0.0
+
+  LR_SCHEDULER:
+    target: CosineAnnealingLR
+    params:
+      T_max: ${eval:${LOGGER.VAL_EVERY_STEPS} * 100}  # 100 for Stages I-III, 1000 for the PQ-VAE (stepped once per epoch)
+      eta_min: 1e-6
+
+EVAL:
+  SPLIT: 'val' # Validation split name
+  BATCH_SIZE: 4 # Validation Batch size
+  NUM_WORKERS: 8 # Validation Batch size
+
+model:
+  params:
+    # Related parameters
+    stage: ${TRAIN.STAGE}
+    debug: ${DEBUG}
+    codebook_size: ${model.params.motion_vae.params.code_num}
+    metrics_dict: ${METRIC.TYPE}
+
+LOSS:
+  LAMBDA_JOINT: 1.0 # Lambda for joint losses
+  LAMBDA_VELOCITY: 0.5 # Lambda for velocity losses
+  LAMBDA_COMMIT: 0.02 # Lambda for commitment losses
+
+METRIC:
+  DIST_SYNC_ON_STEP: True
+  DIVERSITY_TIMES: 300 # Number of times to repeat the diversity test
+  EVALUATOR: ${evaluator.text_motion}
+
+DATASET:
+  CODE_PATH: TOKENS # motion tokens folder (written by scripts/tokenize_motion.py)
+  NFEATS: 279 # set by the datamodule
+  MAX_MOTION_LEN: 300 # frames; motion segments are ~5 s at 10 FPS
+  UNIT_LEN: 4 # temporal downsampling of the motion tokenizer
+
+LOGGER:
+  VAL_EVERY_STEPS: 10
+  TENSORBOARD:
+    target: pytorch_lightning.loggers.TensorBoardLogger
+    params:
+      save_dir: ${FOLDER_EXP}
+      name: 'tensorboard'
+      version: ''
+  WANDB:
+    target: pytorch_lightning.loggers.WandbLogger
+    params:
+      project: null
+      offline: False
+      id: null
+      version: ''
+      name: ${NAME}
+      save_dir: ${FOLDER_EXP}
